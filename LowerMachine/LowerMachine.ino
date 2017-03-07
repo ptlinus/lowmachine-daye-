@@ -427,6 +427,19 @@ void openBeep(unsigned char num)
 	}
 }
 
+void findVEncoder_C()
+{
+	V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+	while (true)
+	{
+		if ((!digitalRead(v_encoderPinC)))
+		{
+			V_Motor_STOP();
+			break;
+		}
+	}
+	serial_name.print("have find C signal\r\n");
+}
 void setup()
 {
 	pinMode(0, INPUT);
@@ -441,6 +454,9 @@ void setup()
 	scanBuff_hvl[indx_++] = 22;
 	scanBuff_hvl[indx_++] = 55;
 	scanBuff_hvl[indx_++] = BUFSIZE * 6;
+
+
+
 	//H_Motor_Ctrl(m_controlInfo.h_dir, m_controlInfo.h_speedPWM);
 }
 
