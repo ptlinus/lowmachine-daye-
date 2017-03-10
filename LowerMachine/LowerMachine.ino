@@ -8,32 +8,68 @@
 #define DEBUGPRINT
 
 #define UPPERBOUND 2500
-#define LOWERBOUND -200
+#define LOWERBOUND -20
+
+#define STARTDATANUM 5
+#define BUFSIZE 8
+#define SUMBUF (STARTDATANUM+BUFSIZE*6+2)
+static unsigned char scanBuff_hvl[SUMBUF];
+static unsigned char verifyBit = 0;
+static unsigned int indx_ = 0;
 
 LIDARLite myLidarLite;
-struct controlInfo m_controlInfo;
 volatile  int v_oldEncoderPos = 0;
 volatile bool flagLED = 0;
+volatile bool recyc = 0;
 
 void ResetSystem()
 {
 	bool h_endReset = 1;
 	bool v_endReset = 1;
-	H_Motor_STOP();
+
+
+	H_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+	int cntTime = 0;
+	while (cntTime++ < 20)
+	{
+		delay(200);
+		if ((digitalRead(h_startLocation)))
+		{
+			H_Motor_STOP();
+			
+			H_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
+			delay(2000);
+			while (!(digitalRead(h_startLocation)));
+			H_Motor_STOP();
+			break;
+		}
+	}
+	if (cntTime < 20)
+	{
+		H_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+	}
+	else
+	{
+		H_Motor_STOP();
+	}
 	V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED); //远离线位开关  持续4s
 	delay(4000);
+	V_Motor_STOP();
+	H_Motor_STOP();
+	delay(300);
 
 	H_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
 	V_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
 	while (h_endReset || (v_endReset))
 	{
-		if ((!digitalRead(h_encoderPinC)) && h_endReset)
+		if ((digitalRead(h_startLocation)) && h_endReset)
 		{
 			h_endReset = 0;
 			H_Motor_STOP();
 		}
 		
 		if ((digitalRead(v_startLocation)) && v_endReset)
+	//	if ((!digitalRead(v_encoderPinC)) && v_endReset)
 		{
 			v_endReset = 0;
 			V_Motor_STOP();
@@ -41,8 +77,10 @@ void ResetSystem()
 	}
 	H_Motor_STOP();
 	V_Motor_STOP();
+	openBeep(2);
 
-	serial_name.print("System Reset\r\n");
+
+	//serial_name.print("System Reset\r\n");
 }
 
 
@@ -52,35 +90,19 @@ void ResetSystemV()
 
 	H_Motor_STOP();
 	V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED); //远离线位开关  持续2s
-	delay(4000);
+	delay(6000);
 	V_Motor_STOP();
 	
 	V_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);//靠近线位开关  
 
 	while(!digitalRead(v_startLocation));
+	//while (digitalRead(v_encoderPinC));
+
 	V_Motor_STOP();
 
 	serial_name.print("System Reset\r\n");
 }
 
-void openMachine()
-{
-	V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_HIGHSPEED);
-	while (HIGH == digitalRead(v_startLocation));
-	v_encoderPos = 0;
-	h_encoderPos = 0;
-	H_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
-	serial_name.print("System start\r\n");
-	delay(500);
-
-	/*H_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
-	while (true)
-	{
-		Serial.println(h_encoderPos);
-		delay(100);
-	}*/
-
-}
 void initInfo()
 {
 	m_controlInfo.h_speedPWM = 220;
@@ -88,7 +110,7 @@ void initInfo()
 	m_controlInfo.h_dir = 0; //0：向右旋转  1：向左旋转
 	m_controlInfo.v_dir = 0;  //0:逆时针旋转   1:顺时针旋转
 	m_controlInfo.verticalDirZcnt = 5;
-	m_controlInfo.angleSize = 500;
+	m_controlInfo.angleSize = 1000;
 }
 
 void printInfo()
@@ -309,9 +331,8 @@ void timeUnusualFun()
 void initPhase()
 {
 
-	pinMode(40, OUTPUT); //LED
-
-	//pinMode(31, OUTPUT); //蜂蜜器
+	pinMode(led, OUTPUT); //LED
+	pinMode(beep, OUTPUT); //蜂蜜器
 
 
 
@@ -329,16 +350,21 @@ void initPhase()
 
 	pinMode(v_encoderPinA, INPUT);
 	pinMode(v_encoderPinB, INPUT);
+	pinMode(v_encoderPinC, INPUT);
 	digitalWrite(v_encoderPinA, HIGH);  // turn on pullup resistor
 	digitalWrite(v_encoderPinB, HIGH);  // turn on pullup resistor
+	digitalWrite(v_encoderPinC, HIGH);
 
 	pinMode(v_speedPin, OUTPUT);
 	pinMode(v_dirPin, OUTPUT);
 	analogWrite(v_speedPin, 255); //stop
 	digitalWrite(v_dirPin, LOW); //full speed
 	pinMode(v_startLocation, INPUT);
-	//  pinMode(v_clearButton_90, INPUT);
+	pinMode(h_startLocation, INPUT);
 	digitalWrite(v_startLocation, HIGH);
+	digitalWrite(h_startLocation, HIGH);
+
+	//  pinMode(v_clearButton_90, INPUT);
 	//  digitalWrite(v_clearButton_90, HIGH);
 
 
@@ -420,19 +446,25 @@ void openBeep(unsigned char num)
 {
 	for (unsigned char i = 0; i < num; i++)
 	{
-		analogWrite(31, 255);
-		delay(1000);
-		analogWrite(31, 0);
-		delay(1000);
+		analogWrite(beep, 255);
+		delay(100);
+		analogWrite(beep, 0);
+		delay(100);
 	}
 }
 
 void findVEncoder_C()
 {
-	V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+//	H_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
+//	serial_name.print("H_Motor_Ctrl run\r\n");
+
+	V_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_HIGHSPEED);
+	delay(3000);
+	V_Motor_Ctrl(FARFROMSTARTLOC, 180);
+
 	while (true)
 	{
-		if ((!digitalRead(v_encoderPinC)))
+		if (!(digitalRead(v_encoderPinC)))
 		{
 			V_Motor_STOP();
 			break;
@@ -442,17 +474,18 @@ void findVEncoder_C()
 }
 void setup()
 {
-	pinMode(0, INPUT);
-	analogWrite(0, 255);
+	//pinMode(0, INPUT);
+	//analogWrite(0, 255);
 
-	pinMode(1, OUTPUT);
-	analogWrite(1, 255);
+	//pinMode(1, OUTPUT);
+	//analogWrite(1, 255);
 
 	initPhase();
 
 	scanBuff_hvl[indx_++] = 11;
 	scanBuff_hvl[indx_++] = 22;
 	scanBuff_hvl[indx_++] = 55;
+	scanBuff_hvl[indx_++] = 13; //数据标识位
 	scanBuff_hvl[indx_++] = BUFSIZE * 6;
 
 
@@ -460,23 +493,86 @@ void setup()
 	//H_Motor_Ctrl(m_controlInfo.h_dir, m_controlInfo.h_speedPWM);
 }
 
-volatile bool recyc = 0;
+
+void openMachine()
+{
+	recyc = 0;
+
+	H_Motor_STOP();
+	V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_HIGHSPEED);
+	while (HIGH == digitalRead(v_startLocation));
+	//while (LOW == digitalRead(v_encoderPinC));
+	v_encoderPos = 0;
+	h_encoderPos = 0;
+}
 void loop()
 {
+	//printInfo();
+	////ResetSystem();
+	//V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+	//delay(10000);
+	////////H_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
+	//while (true)
+	//{
+	//	printInfo();
+	//	delay(100);
 
-	if (0 == runStateFlag)
-	{
-//		MsTimer2::stop();
-		analogWrite(40, 255);
+	//}
+	//ResetSystem();
+	//h_encoderPos = 0;
+	//v_encoderPos = 0;
+	//H_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED-100);
+	//delay(2000);
+	//while (true)
+	//{
+	//	if (h_encoderPos > HOR_ENCODER_NUM)
+	//	{
+	//		H_Motor_STOP();
+	//		delay(300);
 
-		runStateFlag = 2;
-		ResetSystemV();
-		return;
-		//continue;
-	}
+	//		H_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED - 100);
+	//		delay(2000);
+	//		while (!(digitalRead(h_startLocation)));
+
+	//		H_Motor_STOP();
+	//		V_Motor_STOP();
+	//		openBeep(5);
+
+	//		//ResetSystem();
+	//		runStateFlag = 2;
+	//		while (true)
+	//		{
+	//			delay(50);
+
+	//		}
+	//	}
+	//	delay(5);
+	//}
+	
+	//V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+//	V_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
+	//delay(6000);
+	//findVEncoder_C();
+	//while (true)
+	//{
+	//	printInfo();
+	//	delay(100);
+	//}
+//	if (0 == runStateFlag)
+//	{
+////		MsTimer2::stop();
+//		analogWrite(led, 255);
+//
+//		runStateFlag = 2;
+//	//	ResetSystem();
+//		return;
+//		//continue;
+//	}
+
 	if (1 == runStateFlag)
 	{
-		analogWrite(40, 0);
+		ResetSystem();
+		analogWrite(led, 0);
 //		MsTimer2::start();
 		v_oldEncoderPos = v_encoderPos;
 		openMachine();
@@ -485,62 +581,81 @@ void loop()
 	}
 	if (2 == runStateFlag)
 	{
+		machineStatus = 2;
+		H_Motor_STOP();
+		V_Motor_STOP();
+	
 		return;
 	}
 	if (v_encoderPos < LOWERBOUND || v_encoderPos > UPPERBOUND)
-	{//异常处理
-		openBeep(50);
+	{//异常处理	
 		H_Motor_STOP();
 		V_Motor_STOP();
+		openBeep(500);
 		runStateFlag = 2;
 		return;
 	}
-	if (HIGH == digitalRead(v_startLocation))
-	{
-
-		V_Motor_STOP();
-
-
-		H_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
-		delay(m_controlInfo.angleSize);
-		H_Motor_STOP();
-
-	
-		V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_HIGHSPEED);
-
-		while (HIGH == digitalRead(v_startLocation));
-		v_encoderPos = 0;
-		delay(300);
-		recyc = 0;
-
-	}
-#define MAXVNUM 2190
+#define MAXVNUM 2100
 	if ((v_encoderPos) > MAXVNUM)
 	{
+
 		V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
-		delay(300);
+		delay(500);
 		V_Motor_STOP();
 
-		H_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+		H_Motor_Ctrl(FARFROMSTARTLOC, 220);
 		delay(m_controlInfo.angleSize);
 		H_Motor_STOP();
 
 		V_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_HIGHSPEED);
-		while ((v_encoderPos) > MAXVNUM - 10);
+		while ((v_encoderPos) > MAXVNUM - 200);
 		recyc = 1;
 	}
-	if ((1 == recyc) && (v_encoderPos) < 100) {
+	if ((1 == recyc) && (v_encoderPos) < 200) 
+	{
+
 		V_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
+		while (LOW == digitalRead(v_startLocation));
+		//while (HIGH == digitalRead(v_encoderPinC));
+		V_Motor_STOP();
+		H_Motor_Ctrl(FARFROMSTARTLOC, 220);
+		delay(m_controlInfo.angleSize);
+		H_Motor_STOP();
+		V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_HIGHSPEED);
+		while (HIGH == digitalRead(v_startLocation));
+		//while (LOW == digitalRead(v_encoderPinC));
+		v_encoderPos = 0;
+		delay(300);
+		recyc = 0;
 		return;
 	}
 	if (h_encoderPos > HOR_ENCODER_NUM)
 	{
-		openBeep(5);
+		H_Motor_STOP();
+		if (1 == recyc)
+		{
+			V_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
+		}
+		else
+		{
+			V_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+		}
+		delay(500);
+		V_Motor_STOP();
+
+		H_Motor_Ctrl(CLOSETOSTARTLOC, MOTOR_LOWSPEED);
+		delay(2000);
+		while (!(digitalRead(h_startLocation)));
+		H_Motor_STOP();
+		H_Motor_Ctrl(FARFROMSTARTLOC, MOTOR_LOWSPEED);
+		delay(2000);
 		H_Motor_STOP();
 		V_Motor_STOP();
+
 		runStateFlag = 2;
 		return;
 	}
+
 	static int produced = 0;;
 	int r = myLidarLite.distance();
 	int h = h_encoderPos;
@@ -572,7 +687,7 @@ void loop()
 		serial_name.write(scanBuff_hvl, indx_);
 		delayMicroseconds(200);
 		produced = 0;
-		indx_ = 4;
+		indx_ = STARTDATANUM;
 		verifyBit = 0;
 	}
 }

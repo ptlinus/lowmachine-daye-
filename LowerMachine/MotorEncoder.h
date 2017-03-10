@@ -34,7 +34,11 @@ enum PinAssignments {
 	v_encoderPinB = 19,
 	v_encoderPinC = 25,
 
+	h_startLocation = 51,  //线位开关  //1-检测到目标
 	v_startLocation = 7,  //线位开关  //1-检测到目标
+
+	beep = 41, //蜂鸣器
+	led = 40, //LED
 };
 #endif
 
@@ -47,6 +51,7 @@ struct controlInfo
 	int verticalDirZcnt;
 	int angleSize;
 };
+struct controlInfo m_controlInfo;
 
 
 volatile int h_encoderPos = 0;
@@ -123,42 +128,55 @@ void H_doEncoderB()
 #endif
 }
 
-void V_doEncoderA()
-{
-#ifdef VERSION1
-	v_A_set = (digitalRead(v_encoderPinA) == HIGH);
-	if (v_A_set != v_B_set)
-		v_encoderPos = v_encoderPos - 1;
-	else
-		v_encoderPos = v_encoderPos + 1;
-#endif
-#ifdef VERSION2
-	v_A_set = (digitalRead(v_encoderPinA) == HIGH);
-	if (v_A_set != v_B_set)
-		v_encoderPos = v_encoderPos + 1;
-	else
-		v_encoderPos = v_encoderPos - 1;
-#endif
+//void V_doEncoderA()
+//{
+//#ifdef VERSION1
+//	v_A_set = (digitalRead(v_encoderPinA) == HIGH);
+//	if (v_A_set != v_B_set)
+//		v_encoderPos = v_encoderPos - 1;
+//	else
+//		v_encoderPos = v_encoderPos + 1;
+//#endif
+//#ifdef VERSION2
+//	v_A_set = (digitalRead(v_encoderPinA) == HIGH);
+//	if (v_A_set != v_B_set)
+//		v_encoderPos = v_encoderPos + 1;
+//	else
+//		v_encoderPos = v_encoderPos - 1;
+//#endif
+//}
+//
+//
+//void V_doEncoderB()
+//{
+//#ifdef VERSION1
+//	v_B_set = (digitalRead(v_encoderPinB) == HIGH);
+//	if (v_A_set == v_B_set)
+//		v_encoderPos = v_encoderPos - 1;
+//	else
+//		v_encoderPos = v_encoderPos + 1;
+//#endif
+//#ifdef VERSION2
+//	v_B_set = (digitalRead(v_encoderPinB) == HIGH);
+//	if (v_A_set == v_B_set)
+//		v_encoderPos = v_encoderPos - 1;
+//	else
+//		v_encoderPos = v_encoderPos + 1;
+//#endif
+//}
+void V_doEncoderA(){
+	// Test transition
+	v_A_set = digitalRead(v_encoderPinA) == HIGH;
+	// and adjust counter + if A leads B
+	v_encoderPos += (v_A_set != v_B_set) ? +1 : -1;
 }
 
-
-void V_doEncoderB()
-{
-#ifdef VERSION1
-	v_B_set = (digitalRead(v_encoderPinB) == HIGH);
-	if (v_A_set == v_B_set)
-		v_encoderPos = v_encoderPos - 1;
-	else
-		v_encoderPos = v_encoderPos + 1;
-#endif
-#ifdef VERSION2
-	v_B_set = (digitalRead(v_encoderPinB) == HIGH);
-	if (v_A_set == v_B_set)
-		v_encoderPos = v_encoderPos - 1;
-	else
-		v_encoderPos = v_encoderPos + 1;
-#endif
+// Interrupt on B changing state
+void V_doEncoderB(){
+	// Test transition
+	v_B_set = digitalRead(v_encoderPinB) == HIGH;
+	// and adjust counter + if B follows A
+	v_encoderPos += (v_A_set == v_B_set) ? +1 : -1;
 }
-
 
 #endif
