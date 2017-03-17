@@ -14,12 +14,15 @@ struct serialCommBuf
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static unsigned char scanBuff_ackSignal[8] = { 11, 22, 55, 12, 1, 6, 6, 178 };
+static unsigned char scanBuff_scanFinishSignal[8] = { 11, 22, 55, 14, 1, 6, 6, 178 };
+static unsigned char scanBuff_scanErrorSignal[8] = { 11, 22, 55, 15, 1, 6, 6, 178 };
+
 
 String comdata = "";
 bool mark = 0;
 #define REVIBUF 6
 int numdata[REVIBUF] = { 0 };
-unsigned char runStateFlag = 2; //2:关闭机器  1：启动机器
+unsigned char runStateFlag = 2; //0：扫描ing 2:关闭机器  1：启动机器  3：扫描完毕  4：扫描异常
 unsigned char machineStatus = 0;
 
 //起始位置55+数据标识位XX+数据位H+数据位L+校验位P+结束位77
@@ -86,6 +89,18 @@ void serialEvent()
 					{
 						runStateFlag = 2;
 						machineStatus = 2;
+					}
+				}
+			}
+			else if (numdata[1] == 14)//PC发送过来的应答信号
+			{
+				pariXor ^= numdata[2];
+				pariXor ^= numdata[3];
+				if (pariXor == numdata[4])
+				{
+					if (3 == runStateFlag || 4 == runStateFlag)
+					{
+						runStateFlag = 2;
 					}
 				}
 			}
