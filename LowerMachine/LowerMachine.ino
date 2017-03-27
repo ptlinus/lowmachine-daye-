@@ -622,7 +622,7 @@ void loop()
 		runStateFlag = 4;
 		return;
 	}
-#define MAXVNUM 2100
+#define MAXVNUM 2400
 	if ((v_encoderPos) > MAXVNUM)
 	{
 
